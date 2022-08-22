@@ -1,152 +1,140 @@
-// ignore_for_file: unnecessary_string_interpolations, non_constant_identifier_names, curly_braces_in_flow_control_structures, empty_statements, avoid_print, null_check_always_fails
+import 'package:bloc/bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:todo/modules/todo_app/new_Done/New_Done_Screen.dart';
-import 'package:todo/modules/todo_app/new_Tasks/New_Tasks_Screen.dart';
-import 'package:todo/modules/todo_app/new_archived/New_archived_Screen.dart';
-import 'package:todo/network/local/cache_helper.dart';
-import 'package:todo/shared/cubit/states.dart';
+import 'package:todo/modules/new_Archive.dart';
+import 'package:todo/modules/new_Done.dart';
+import 'package:todo/modules/new_Tasks.dart';
+import 'package:todo/shared/cubit/stats.dart';
 
-class AppCubit extends Cubit<AppStates> {
+class AppCubit extends Cubit<AppState> {
   AppCubit() : super(AppInitialState());
 
   static AppCubit get(context) => BlocProvider.of(context);
 
   int currentIndex = 0;
-  List<Widget> screens = [
-    New_Tasks_Screen(),
-    New_Done_Screen(),
-    New_archived_Screen(),
-  ];
+
+  List<Widget> screens = [NewTasks(), NewDone(), NewArchive()];
+
   List<String> titles = [
-    'New Tasks',
-    'Done Tasks',
-    'Archived Tasks',
+    "Tasks",
+    "Done",
+    "Archive",
   ];
 
-  void ChangeIndex(int index) {
+  void changeIndex(int index) {
     currentIndex = index;
     emit(AppChangeBottomNavBarState());
   }
 
-  Database? database;
-  List<Map> NewTasks = [];
-  List<Map> DoneTasks = [];
-  List<Map> ArchivedTasks = [];
+  late Database database;
+  List<Map> tasks = [];
+  List<Map> newTasks = [];
+  List<Map> doneTasks = [];
+  List<Map> archiveTasks = [];
 
-  // Create Database ()
-  void createDatabase() {
-    openDatabase(
-      'Todo.db',
-      version: 1,
-      onCreate: (database, version) async {
-        print('Database Created ');
-        await database
-            .execute(
-                'CREATE TABLE TASKS (id INTEGER PRIMARY KEY , title TEXT , date TEXT, time TEXT, status TEXT)')
-            .then((value) {
-          print('table created');
-        }).catchError((error) {
-          print('Error when to creating table ${error.toString()}');
-        });
-      },
-      onOpen: (database) {
-        getDataFromDatabase(database);
+//createDataBase
 
-        print('Database Opened ');
-      },
-    ).then((value) {
+  void createDataBase() {
+    openDatabase('todo db', version: 1, onCreate: (database, version) {
+      database
+          .execute(
+              "CREATE TABLE tasks(id INTEGER PRIMARY KEY,title TEXT,data TEXT, time TEXT, status TEXT)")
+          .then((value) {
+        // ignore: avoid_print
+        print("createDataBase Mohamed Saeed");
+      }).catchError((error) {
+        print("mohamed error ${error.toString()}");
+      });
+    }, onOpen: (database) {
+      print('DatabaseOpen');
+      getDataBase(database);
+    }).then((value) {
       database = value;
-      emit(AppCreateDatabaseState());
+      emit(AppCreateDataBaseState());
     });
   }
 
-  // Insert Into Database ()
-  insertToDatabase({
+//insertDatabase
+
+  insertDatabase({
     required String title,
     required String time,
     required String date,
   }) async {
-    await database!.transaction((txn) {
+    await database.transaction((txn) {
       return txn
           .rawInsert(
-              'INSERT INTO TASKS (title,date,time,status) Values ("$title","$date","$time","new")')
+              'INSERT INTO tasks(title, data, time ,status) VALUES("$title", "$date", "$time" , "new")')
           .then((value) {
-        print('$value inserted succesfully');
-        emit(AppInsertDatabaseState());
-        getDataFromDatabase(database);
+        print("$value Done InsertDatabase ");
+        emit(AppInsertDataBaseState());
+
+        getDataBase(database);
       }).catchError((error) {
-        print('Error when to inserting New Record  ${error.toString()}');
+        print("mohamed error InsertDatabase ${error.toString()}");
       });
     });
   }
 
-  void getDataFromDatabase(database) {
-    NewTasks = [];
-    DoneTasks = [];
-    ArchivedTasks = [];
+//getDataBase
 
-    emit(AppGetDatabaseLoadingState());
-    database.rawQuery('SELECT * FROM tasks').then((value) {
+  void getDataBase(database) {
+    newTasks = [];
+    doneTasks = [];
+    archiveTasks = [];
+
+    database!.rawQuery('SELECT * FROM Tasks').then((value) {
+      tasks = value;
+      print(tasks);
       value.forEach((element) {
-        if (element['status'] == 'new')
-          NewTasks.add(element);
-        else if (element['status'] == 'done')
-          DoneTasks.add(element);
-        else
-          ArchivedTasks.add(element);
-      });
+        print(element['status']);
 
-      emit(AppGetDatabaseState());
+        if (element['status'] == 'new') {
+          newTasks.add(element);
+        } else if (element['status'] == 'done') {
+          doneTasks.add(element);
+        } else {
+          archiveTasks.add(element);
+        }
+      });
+      emit(AppGetDataBaseState());
     });
-    ;
   }
 
-  bool isBottomSheetShown = false;
-  IconData fabIcon = Icons.edit;
+  void updateDataBase({
+    required String status,
+    required int id,
+  }) async {
+    database.rawUpdate('UPDATE tasks SET status  = ? WHERE id = ?', [
+      '$status',
+      id,
+    ]).then((value) {
+      getDataBase(database);
+      emit(AppUpdateDataBaseState());
+    });
+  }
 
-  void changeBottomSheetState({
+  void deleteDataBase({
+    required int id,
+  }) async {
+    database
+        .rawDelete('DELETE FROM tasks WHERE id = ?', [id])
+    .then((value) {
+      getDataBase(database);
+      emit(AppDeleteDataBaseState());
+    });
+  }
+
+  bool showBottomSheet = false;
+  IconData fabicon = Icons.edit;
+
+  void ChangeBottomSheetState({
     required bool isShow,
     required IconData icon,
   }) {
-    isBottomSheetShown = isShow;
-    fabIcon = icon;
+    showBottomSheet = isShow;
+    fabicon = icon;
     emit(AppChangeBottomSheetState());
-  }
-
-  void UpdateData({
-    required String status,
-    required int id,
-  }) {
-    database!.rawUpdate(
-      'UPDATE tasks SET status = ? WHERE id = ?',
-      ['$status', id],
-    ).then((value) {
-      getDataFromDatabase(database);
-      emit(AppUpdateDatabaseState());
-    });
-  }
-
-  void DeleteData({
-    required int id,
-  }) {
-    database!.rawDelete('DELETE FROM tasks WHERE id = ?', [id]).then((value) {
-      getDataFromDatabase(database);
-      emit((AppDeleteDatabaseState()));
-    });
-  }
-
-  bool isDark = false;
-  void changeAppMode({bool? fromShared}) {
-    if (fromShared != null) {
-      isDark = fromShared;
-      emit(AppChangeModeState());
-    } else {
-      isDark = !isDark;
-      CacheHelper.putBoolean(key: 'isDark', value: isDark).then((value) {
-        emit(AppChangeModeState());
-      });
-    }
   }
 }
